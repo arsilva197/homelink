@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --background: 222 47% 6%;
+    --foreground: 213 31% 91%;
+    --card: 222 47% 8%;
+    --card-foreground: 213 31% 91%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --primary: 38 72% 48%;
+    --primary-foreground: 222 47% 6%;
+    --muted: 223 47% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 38 72% 48%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 63% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 38 72% 48%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+  
+  h1, h2, h3 { @apply font-display; }
+}
+
+/* Homelink custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: hsl(222 47% 8%); }
+::-webkit-scrollbar-thumb { background: hsl(216 34% 22%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(38 72% 48% / 0.6); }
+
+/* CPS score badge styles */
+.cps-high { @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30; }
+.cps-mid { @apply bg-amber-500/20 text-amber-400 border border-amber-500/30; }
+.cps-low { @apply bg-rose-500/20 text-rose-400 border border-rose-500/30; }
+
+/* Chain connector line */
+.chain-line {
+  background: linear-gradient(90deg, hsl(38 72% 48% / 0.4), hsl(38 72% 48% / 0.8), hsl(38 72% 48% / 0.4));
+}
+
+/* Grain texture overlay */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Heatmap colors */
+.heat-low { background: hsl(142 71% 45% / 0.7); }
+.heat-mid { background: hsl(38 92% 50% / 0.7); }
+.heat-high { background: hsl(0 84% 60% / 0.7); }
+
+/* Animated gradient border for active chains */
+@keyframes borderGlow {
+  0%, 100% { border-color: hsl(38 72% 48% / 0.4); }
+  50% { border-color: hsl(38 72% 48% / 0.9); }
+}
+
+.chain-active {
+  animation: borderGlow 2s ease-in-out infinite;
+}

@@ -1,0 +1,514 @@
+// Homelink – Prisma Schema
+// PostgreSQL + full relational model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  USER_OWNER
+  USER_BUYER
+  BROKER
+  AGENCY
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  COMMERCIAL
+  LAND
+  STUDIO
+  PENTHOUSE
+  TOWNHOUSE
+  FARM
+}
+
+enum ListingType {
+  SALE
+  RENT
+  SALE_OR_RENT
+}
+
+enum RepresentationType {
+  OWNER_DIRECT
+  BROKER_LISTING
+  AGENCY_LISTING
+}
+
+enum ChainStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ASSIGNED_TO_BROKER
+  IN_NEGOTIATION
+  COMPLETED
+  EXPIRED
+}
+
+enum BrokerStatus {
+  PENDING_APPROVAL
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum CommitmentLevel {
+  EXPLORING
+  SERIOUS
+  READY_TO_CLOSE
+}
+
+enum NotificationType {
+  NEW_OPPORTUNITY
+  OPPORTUNITY_ASSIGNED
+  CHAIN_EXPIRED
+  BROKER_APPROVED
+  BROKER_SUSPENDED
+  SYSTEM_ALERT
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ─────────────────────────────────────────────
+// USER & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String?
+  googleId          String?   @unique
+  firstName         String
+  lastName          String
+  phone             String?
+  avatarUrl         String?
+  roles             UserRole[]
+  isActive          Boolean   @default(true)
+  isEmailVerified   Boolean   @default(false)
+  emailVerifyToken  String?
+  passwordResetToken String?
+  passwordResetExpiry DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  properties        Property[]
+  buyingPreferences BuyingPreference[]
+  brokerProfile     BrokerProfile?
+  agencyProfile     AgencyProfile?
+  refreshTokens     RefreshToken[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+  @@index([googleId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+// BROKER & AGENCY
+// ─────────────────────────────────────────────
+
+model BrokerProfile {
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creciNumber     String       @unique
+  creciState      String
+  documentUrl     String?
+  agencyId        String?
+  agency          AgencyProfile? @relation(fields: [agencyId], references: [id])
+  status          BrokerStatus @default(PENDING_APPROVAL)
+  approvedAt      DateTime?
+  approvedBy      String?
+  suspendedAt     DateTime?
+  suspendedReason String?
+  bio             String?
+  specializations PropertyType[]
+  regions         String[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  listings        PropertyRepresentation[]
+  opportunities   ChainOpportunity[]
+  imports         BulkImport[]
+
+  @@index([creciNumber])
+  @@index([status])
+  @@map("broker_profiles")
+}
+
+model AgencyProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agencyName  String
+  cnpj        String   @unique
+  logoUrl     String?
+  website     String?
+  address     String?
+  city        String?
+  state       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  brokers     BrokerProfile[]
+  listings    PropertyRepresentation[]
+  imports     BulkImport[]
+
+  @@map("agency_profiles")
+}
+
+// ─────────────────────────────────────────────
+// PROPERTIES
+// ─────────────────────────────────────────────
+
+model Property {
+  id              String       @id @default(uuid())
+  title           String
+  description     String?
+  address         String
+  city            String
+  state           String
+  zipcode         String
+  latitude        Float
+  longitude       Float
+  propertyType    PropertyType
+  bedrooms        Int?
+  bathrooms       Int?
+  sizeM2          Float
+  price           Float
+  listingType     ListingType  @default(SALE)
+  commitmentLevel CommitmentLevel @default(EXPLORING)
+  isActive        Boolean      @default(true)
+  isVerified      Boolean      @default(false)
+  viewCount       Int          @default(0)
+  likeCount       Int          @default(0)
+  neo4jNodeId     String?      // Reference to Neo4j node
+
+  // Owner
+  ownerId         String
+  owner           User         @relation(fields: [ownerId], references: [id])
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  images          PropertyImage[]
+  representation  PropertyRepresentation?
+  chainParticipants ChainParticipant[]
+  likes           PropertyLike[]
+
+  @@index([city, state])
+  @@index([propertyType])
+  @@index([price])
+  @@index([latitude, longitude])
+  @@index([isActive])
+  @@index([ownerId])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id           String   @id @default(uuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  imageUrl     String
+  displayOrder Int      @default(0)
+  uploadedAt   DateTime @default(now())
+
+  @@index([propertyId])
+  @@map("property_images")
+}
+
+model PropertyRepresentation {
+  id                 String             @id @default(uuid())
+  propertyId         String             @unique
+  property           Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ownerId            String
+  brokerId           String?
+  broker             BrokerProfile?     @relation(fields: [brokerId], references: [id])
+  agencyId           String?
+  agency             AgencyProfile?     @relation(fields: [agencyId], references: [id])
+  representationType RepresentationType @default(OWNER_DIRECT)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([brokerId])
+  @@index([agencyId])
+  @@map("property_representations")
+}
+
+model PropertyLike {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  userId     String
+  createdAt  DateTime @default(now())
+
+  @@unique([propertyId, userId])
+  @@map("property_likes")
+}
+
+// ─────────────────────────────────────────────
+// BUYING PREFERENCES
+// ─────────────────────────────────────────────
+
+model BuyingPreference {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label          String?
+  preferredCity  String
+  preferredState String
+  preferredRegion String?
+  propertyType   PropertyType?
+  minPrice       Float?
+  maxPrice       Float?
+  minSizeM2      Float?
+  maxSizeM2      Float?
+  minBedrooms    Int?
+  maxBedrooms    Int?
+  isActive       Boolean      @default(true)
+  neo4jNodeId    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([preferredCity])
+  @@map("buying_preferences")
+}
+
+// ─────────────────────────────────────────────
+// GRAPH & MATCHING ENGINE
+// ─────────────────────────────────────────────
+
+model GraphEdge {
+  id                   String   @id @default(uuid())
+  sourcePropertyId     String
+  targetPropertyId     String
+  priceMatchScore      Float    @default(0)
+  locationMatchScore   Float    @default(0)
+  propertyTypeScore    Float    @default(0)
+  userPreferenceScore  Float    @default(0)
+  likeSignal           Float    @default(0)
+  totalScore           Float    @default(0)
+  neo4jRelationId      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([sourcePropertyId, targetPropertyId])
+  @@index([sourcePropertyId])
+  @@index([targetPropertyId])
+  @@index([totalScore])
+  @@map("graph_edges")
+}
+
+// ─────────────────────────────────────────────
+// CHAIN OPPORTUNITIES
+// ─────────────────────────────────────────────
+
+model ChainOpportunity {
+  id               String       @id @default(uuid())
+  chainSize        Int
+  cpsScore         Float
+  status           ChainStatus  @default(PENDING_REVIEW)
+  region           String
+  totalValue       Float
+  expiresAt        DateTime
+  neo4jChainId     String?
+
+  // Admin management
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+
+  // Broker assignment
+  assignedBrokerId String?
+  assignedBroker   BrokerProfile? @relation(fields: [assignedBrokerId], references: [id])
+  assignedAt       DateTime?
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relations
+  participants     ChainParticipant[]
+  priceBridge      PriceBridgeEntry[]
+  notifications    Notification[]
+
+  @@index([status])
+  @@index([cpsScore])
+  @@index([assignedBrokerId])
+  @@map("chain_opportunities")
+}
+
+model ChainParticipant {
+  id                String           @id @default(uuid())
+  chainId           String
+  chain             ChainOpportunity @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  propertyId        String
+  property          Property         @relation(fields: [propertyId], references: [id])
+  position          Int
+  netAdjustment     Float            @default(0)
+  createdAt         DateTime         @default(now())
+
+  @@unique([chainId, propertyId])
+  @@index([chainId])
+  @@map("chain_participants")
+}
+
+model PriceBridgeEntry {
+  id            String           @id @default(uuid())
+  chainId       String
+  chain         ChainOpportunity @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  fromPropertyId String
+  toPropertyId  String
+  adjustment    Float
+  direction     String           // "pay" | "receive"
+  createdAt     DateTime         @default(now())
+
+  @@index([chainId])
+  @@map("price_bridge_entries")
+}
+
+// ─────────────────────────────────────────────
+// HEATMAP
+// ─────────────────────────────────────────────
+
+model HeatmapCell {
+  id              String   @id @default(uuid())
+  gridX           Int
+  gridY           Int
+  centerLat       Float
+  centerLng       Float
+  gridSizeKm      Float    @default(5)
+  propertiesCount Int      @default(0)
+  edgesCount      Int      @default(0)
+  chainCount      Int      @default(0)
+  liquidityScore  Float    @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([gridX, gridY])
+  @@index([liquidityScore])
+  @@map("heatmap_cells")
+}
+
+// ─────────────────────────────────────────────
+// BULK IMPORTS
+// ─────────────────────────────────────────────
+
+model BulkImport {
+  id          String       @id @default(uuid())
+  brokerId    String?
+  broker      BrokerProfile? @relation(fields: [brokerId], references: [id])
+  agencyId    String?
+  agency      AgencyProfile? @relation(fields: [agencyId], references: [id])
+  fileName    String?
+  fileUrl     String?
+  totalRows   Int          @default(0)
+  successRows Int          @default(0)
+  errorRows   Int          @default(0)
+  status      ImportStatus @default(PENDING)
+  errors      Json?
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  @@index([status])
+  @@map("bulk_imports")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  isRead      Boolean          @default(false)
+  chainId     String?
+  chain       ChainOpportunity? @relation(fields: [chainId], references: [id])
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────
+// AUDIT
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// MATCHING ENGINE STATE
+// ─────────────────────────────────────────────
+
+model MatchingEngineRun {
+  id              String   @id @default(uuid())
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  propertiesScanned Int    @default(0)
+  edgesCreated    Int      @default(0)
+  edgesUpdated    Int      @default(0)
+  chainsDetected  Int      @default(0)
+  opportunitiesCreated Int @default(0)
+  durationMs      Int?
+  status          String   @default("running")
+  error           String?
+
+  @@index([startedAt])
+  @@map("matching_engine_runs")
+}
